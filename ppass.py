@@ -417,16 +417,17 @@ def args_parse():
     parser_append.set_defaults(func=args_process_ls)
 
     parser_append = subparsers.add_parser("insert", help="""Insert a new password into the password store called pass-name.
-                                                         This will read the new password from standard in.
-                                                         Prompt before overwriting an existing password,
-                                                         unless --force or -f is specified""")
+                                                            This will read the new password from standard in.
+                                                            Prompt before overwriting an existing password,
+                                                            unless --force or -f is specified""")
     parser_append.add_argument("pass-name", help="Name of the password")
     parser_append.add_argument("--force", "-f", help="Don't prompt before overwriting an existing password",
                                action="store_true")
     parser_append.set_defaults(func=args_process_insert)
 
     parser_append = subparsers.add_parser("show", help="""Decrypt and print a password named pass-name.
-                                                       Print old password values if --history is specified""")
+                                                          Print full info if --full or -f is specified.
+                                                          Print info about old passwords if --history is specified""")
     parser_append.add_argument("pass-name", help="Name of the password")
     parser_append.add_argument("--history", help="Print password history", action="store_true")
     parser_append.add_argument("--full", "-f", help="Print full password info", action="store_true")
