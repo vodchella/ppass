@@ -328,13 +328,14 @@ def args_process_init(in_args):
 
 
 def args_process_show(in_args):
+    global g_conn
     password_name = str(in_args.__getattribute__("pass-name"))
     if not store_password_exists(password_name):
         stderr_out("Error: %s is not in the password store.\n" % password_name)
     else:
+        def _str(val):
+            return val if val is not None else ""
         if in_args.history:
-            def _str(val):
-                return val if val is not None else ""
             op_cnt = int(sqlite_get_one_value("""SELECT count(*)
                                                  FROM   passwords WHERE
                                                         password_name = ? AND
@@ -343,12 +344,11 @@ def args_process_show(in_args):
                 print("Decrypting passwords...")
             table = PrettyTable(["Current", "Password", "Created at", "Login", "Description"])
             console_progress_bar(0, op_cnt)
-            global g_conn
             for rec in enumerate(g_conn.execute("""SELECT deleted_bool, created_at, login, description, encrypted_value
-                                         FROM   passwords
-                                         WHERE  password_name = ? AND
-                                                group_id = 1
-                                         ORDER BY password_id DESC""", [password_name]), start=1):
+                                                   FROM   passwords
+                                                   WHERE  password_name = ? AND
+                                                          group_id = 1
+                                                   ORDER BY password_id DESC""", [password_name]), start=1):
                 row = rec[1]
                 table.add_row(["[x]" if row[0] == 0 else "",
                                gpg_decrypt(row[4]),
@@ -356,6 +356,18 @@ def args_process_show(in_args):
                                _str(row[2]),
                                _str(row[3])])
                 console_progress_bar(rec[0], op_cnt)
+            print(table)
+        elif in_args.full:
+            table = PrettyTable(["Password", "Created at", "Login", "Description"])
+            for row in g_conn.execute("""SELECT created_at, login, description, encrypted_value
+                                         FROM   passwords
+                                         WHERE  password_name = ? AND
+                                                deleted_bool = 0 AND
+                                                group_id = 1""", [password_name]):
+                table.add_row([gpg_decrypt(row[3]),
+                               _str(row[0]),
+                               _str(row[1]),
+                               _str(row[2])])
             print(table)
         else:
             print(store_get_password(password_name))
@@ -416,8 +428,8 @@ def args_parse():
     parser_append = subparsers.add_parser("show", help="""Decrypt and print a password named pass-name.
                                                        Print old password values if --history is specified""")
     parser_append.add_argument("pass-name", help="Name of the password")
-    parser_append.add_argument("--history", help="Print password history",
-                               action="store_true")
+    parser_append.add_argument("--history", help="Print password history", action="store_true")
+    parser_append.add_argument("--full", "-f", help="Print full password info", action="store_true")
     parser_append.set_defaults(func=args_process_show)
 
     return g_parser.parse_args()
