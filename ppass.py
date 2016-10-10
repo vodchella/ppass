@@ -1,12 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-#
-# Create key pair:
-#   sudo rngd -r /dev/urandom
-#   sudo gpg2 --gen-key
-#
-
 import sys
 import sqlite3
 import traceback
@@ -75,6 +69,8 @@ except ImportError:
 # Console functions
 #
 def console_progress_bar(iteration, total, decimals=1, bar_length=100):
+    if total == 1:
+        return
     format_str = "{0:." + str(decimals) + "f}"
     percents = format_str.format(100 * (iteration / float(total)))
     filled_length = int(round(bar_length * iteration / float(total)))
@@ -279,13 +275,12 @@ def store_password_exists(password_name, group_id=1):
                                     [password_name, group_id])) != 0
 
 
-def store_save_password(password_name, password_value, group_id=None):
+def store_save_password(password_name, password_value, group_id=1):
     try:
         global g_conn
         result = False
         encrypted_value = gpg_encrypt(password_value)
         if encrypted_value:
-            gr_id = 1 if group_id is None else group_id
             g_conn.execute("""INSERT INTO passwords (group_id, password_name, encrypted_value, login, description)
                               SELECT ?, ?, ?, login, description
                               FROM   (SELECT password_id, login, description
@@ -297,7 +292,7 @@ def store_save_password(password_name, password_value, group_id=None):
                                       SELECT 0, NULL, NULL
                                       ORDER BY 1 DESC
                                       LIMIT 1);""",
-                           [gr_id, password_name, encrypted_value, password_name, gr_id])
+                           [group_id, password_name, encrypted_value, password_name, group_id])
             g_conn.commit()
             result = True
         return result
@@ -340,11 +335,12 @@ def args_process_show(in_args):
         if in_args.history:
             def _str(val):
                 return val if val is not None else ""
-            print("Decrypting passwords...")
             op_cnt = int(sqlite_get_one_value("""SELECT count(*)
                                                  FROM   passwords WHERE
                                                         password_name = ? AND
                                                         group_id = 1""", [password_name]))
+            if op_cnt > 1:
+                print("Decrypting passwords...")
             table = PrettyTable(["Current", "Password", "Created at", "Login", "Description"])
             console_progress_bar(0, op_cnt)
             global g_conn
