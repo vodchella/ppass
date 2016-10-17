@@ -5,6 +5,7 @@ import sys
 import sqlite3
 import traceback
 import argparse
+import subprocess
 from getpass import getpass
 
 # Global variables
@@ -45,9 +46,9 @@ def panic(msg=None):
     sys.exit(1)
 
 
-def module_not_installed(module_name, project_url):
-    panic("Module '%(module)s' isn't installed. Install it with 'sudo pip install %(module)s' (%(url)s)\n" %
-          {"module": module_name, "url": project_url})
+def module_not_installed(module_name, project_url, install_command="pip"):
+    panic("Module '%(module)s' isn't installed. Install it with 'sudo %(cmd)s install %(module)s' %(url)s\n" %
+          {"module": module_name, "url": "(%s)" % project_url if len(project_url) > 0 else "", "cmd": install_command})
 
 
 #
@@ -56,13 +57,18 @@ def module_not_installed(module_name, project_url):
 last_module = ("sh", "https://github.com/amoffat/sh/")
 try:
     # noinspection PyUnresolvedReferences
-    from sh import printf, gpg2, base64
+    from sh import printf, gpg2, base64, date
+
+    last_module = ("at", "", "apt")
+    # noinspection PyUnresolvedReferences
+    from sh import at
 
     last_module = ("prettytable", "https://code.google.com/archive/p/prettytable/")
     # noinspection PyUnresolvedReferences
     from prettytable import PrettyTable
 except ImportError:
-    module_not_installed(last_module[0], last_module[1])
+    cmd = "pip" if len(last_module) < 3 else last_module[2]
+    module_not_installed(last_module[0], last_module[1], cmd)
 
 
 #
@@ -370,7 +376,16 @@ def args_process_show(in_args):
                                _str(row[2])])
             print(table)
         else:
-            print(store_get_password(password_name))
+            decrypted_password = store_get_password(password_name)
+            if in_args.clip:
+                p = subprocess.Popen(["xclip", "-d", ":0", "-selection", "c"],
+                                     stdin=subprocess.PIPE, close_fds=True)
+                p.communicate(input=decrypted_password.encode("utf-8"))
+                exec_at = str(date("+%Y%m%d%H%M.%S", date="now +45 seconds")).strip("\n")
+                at(printf("printf '' | xclip -d :0 -selection c"), "-t", exec_at)
+                print("Copied %s to clipboard. Will clear in 45 seconds." % password_name)
+            else:
+                print(decrypted_password)
 
 
 def args_process_ls(in_args=None):
@@ -425,12 +440,14 @@ def args_parse():
                                action="store_true")
     parser_append.set_defaults(func=args_process_insert)
 
-    parser_append = subparsers.add_parser("show", help="""Decrypt and print a password named pass-name.
+    parser_append = subparsers.add_parser("show", help="""Decrypt and print a password named pass-name and
+                                                          optionally put it on the clipboard.
                                                           Print full info if --full or -f is specified.
                                                           Print info about old passwords if --history is specified""")
     parser_append.add_argument("pass-name", help="Name of the password")
     parser_append.add_argument("--history", help="Print password history", action="store_true")
     parser_append.add_argument("--full", "-f", help="Print full password info", action="store_true")
+    parser_append.add_argument("--clip", "-c", help="Put password on the clipboard for 45 seconds", action="store_true")
     parser_append.set_defaults(func=args_process_show)
 
     return g_parser.parse_args()
